@@ -60,10 +60,56 @@ class StudentSubjectsScoreAPIView(APIView):
         # # Create Objects Example
         # DataModel.objects.create(filed_1=value_1, filed_2=value_2, filed_2=value_3)
 
+        if None in [student_first_name, student_last_name, subjects_title, score]:
+            return Response({"error"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            score = float(score)
+        except:
+            return Response({"error"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not (0 <= score <= 100):
+            return Response({"error"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            student = Personnel.objects.get(first_name=student_first_name, last_name=student_last_name)
+        except:
+            return Response({"error"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            subject = Subjects.objects.get(title=subjects_title)
+        except:
+            return Response({"error"}, status=status.HTTP_400_BAD_REQUEST)
+
+        student_score, created = StudentSubjectsScore.objects.get_or_create(student=student, subjects=subject)
+
+        if not created:
+            student_score.score = score
+            student_score.save()
+
+
         return Response(status=status.HTTP_201_CREATED)
 
 
 class StudentSubjectsScoreDetailsAPIView(APIView):
+    @staticmethod
+    def get_grade(score):
+        if 80 <= score <= 100:
+            return 'A'
+        elif 75 <= score < 80:
+            return 'B+'
+        elif 70 <= score < 75:
+            return 'B'
+        elif 65 <= score < 70:
+            return 'C+'
+        elif 60 <= score < 65:
+            return 'C'
+        elif 55 <= score < 60:
+            return 'D+'
+        elif 50 <= score < 55:
+            return 'D'
+        else:
+            return 'F'
 
     @staticmethod
     def get(request, *args, **kwargs):
@@ -87,32 +133,65 @@ class StudentSubjectsScoreDetailsAPIView(APIView):
         """
 
         student_id = kwargs.get("id", None)
+        student = Personnel.objects.get(pk=student_id)
+        student_scores = StudentSubjectsScore.objects.filter(student=student).select_related('subjects')
 
+        subject_detail = []
+        for score in student_scores:
+            grade = StudentSubjectsScoreDetailsAPIView.get_grade(score.score)
+            subject_detail.append({
+                "subject": score.subjects.title,
+                "credit": score.credit,
+                "score": score.score,
+                "grade": grade,
+            })
+
+        total_score = 0
+        count_scores = 0
+        for score in student_scores:
+            total_score += score.score
+            count_scores += 1
+        if count_scores > 0:
+            grade_point_average = total_score / count_scores
+        else:
+            grade_point_average = 0
+        grade_point_average = round(grade_point_average, 2)
+        
         example_context_data = {
-            "student":
-                {
-                    "id": "primary key of student in database",
-                    "full_name": "student's full name",
-                    "school": "student's school name"
-                },
-
-            "subject_detail": [
-                {
-                    "subject": "subject's title 1",
-                    "credit": "subject's credit 1",
-                    "score": "subject's score 1",
-                    "grade": "subject's grade 1",
-                },
-                {
-                    "subject": "subject's title 2",
-                    "credit": "subject's credit 2",
-                    "score": "subject's score 2",
-                    "grade": "subject's grade 2",
-                },
-            ],
-
-            "grade_point_average": "grade point average",
+            "student": {
+                "id": student.pk,
+                "full_name": f"{student.first_name} {student.last_name}",
+                "school": student.school_class.school.title if student.school_class else "No School Assigned"
+            },
+            "subject_detail": subject_detail,
+            "grade_point_average": grade_point_average,
         }
+
+        # example_context_data = {
+        #     "student":
+        #         {
+        #             "id": "primary key of student in database",
+        #             "full_name": "student's full name",
+        #             "school": "student's school name"
+        #         },
+
+        #     "subject_detail": [
+        #         {
+        #             "subject": "subject's title 1",
+        #             "credit": "subject's credit 1",
+        #             "score": "subject's score 1",
+        #             "grade": "subject's grade 1",
+        #         },
+        #         {
+        #             "subject": "subject's title 2",
+        #             "credit": "subject's credit 2",
+        #             "score": "subject's score 2",
+        #             "grade": "subject's grade 2",
+        #         },
+        #     ],
+
+        #     "grade_point_average": "grade point average",
+        # }
 
         return Response(example_context_data, status=status.HTTP_200_OK)
 
